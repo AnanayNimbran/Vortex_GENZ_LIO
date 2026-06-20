@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>genz_lio</name>
+  <version>0.1.0</version>
+  <description>
+    Independent reproduction of "GenZ-LIO: Generalizable LiDAR-Inertial Odometry
+    Beyond Confined-Open Boundaries" (Lee et al., arXiv:2603.16273v2). Implements
+    (1) scale-aware adaptive voxelization (PD control with sensitivity-informed
+    gain scheduling), (2) a hybrid-metric point-to-plane / point-to-point ESIKF
+    state update, and (3) a voxel-pruned correspondence search. NOTE: this is a 
+    clean-room reimplementation from the paper,
+    not the authors' official code.
+  </description>
+
+  <maintainer email="vortex@gmail.com">vortex</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>sensor_msgs</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2</depend>
+  <depend>tf2_ros</depend>
+  <depend>eigen</depend>
+
+  <test_depend>ament_cmake_gtest</test_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

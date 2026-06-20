@@ -1,0 +1,100 @@
+# GenZ-LIO parameters.
+# Defaults mirror the paper's "System Configurations" (Sec.VI-A-3). The
+# extrinsics / sensor-noise block must be set for YOUR rig (the paper itself used MID-70/VLP-16/
+# AVIA LiDARs and VN-100/BMI088 IMUs, so do not copy noise figures from it).
+
+genz_lio_node:
+  ros__parameters:
+    # ---- runtime ----
+    use_sim_time: true                   # set true when replaying a rosbag --clock
+
+    # 0 = No Deskew (Rigid Map)
+    # 1 = IMU Exact Deskew (GenZ-LIO Default)
+    # 2 = Constant Velocity Fake Deskew (Like the one in Genz-icp)
+    deskew_mode: 0
+
+    # ---- topics / frames ----
+    points_topic: "/bf_lidar/point_cloud_out"     # sensor_msgs/PointCloud2 
+    imu_topic:    "/synced_ap_imu"           # sensor_msgs/Imu          
+    world_frame:  "odom"
+    body_frame:   "base_link"             # == IMU frame 
+    point_time_scale: 1.0e-9     #1.0 # multiply per-point time field -> seconds
+
+    # ---- output options ----
+    publish_tf:            true            # broadcast odom -> body_frame TF
+    scan_publish_en:       true            # publish ~/cloud_registered (world frame)
+    scan_bodyframe_pub_en: false           # publish ~/cloud_registered_body (body frame)
+    pcd_save_en:           true           # dump the voxel map to PCD on shutdown
+    pcd_save_path:         "/home/vortex/Desktop/genz_lio_map.pcd"
+
+    # ---- LiDAR geometry / sampling (CHANGE!!) ----
+    lidar_min_range:  1.5                  # discard returns closer than this [m]
+    lidar_max_range:  100.0                 # discard returns farther than this [m]
+    lidar_fov_down:  -16.5                 # vertical FoV lower bound [deg]
+    lidar_fov_up:     16.5                 # vertical FoV upper bound [deg]
+    lidar_scan_lines: 24                   # number of vertical channels / scan lines
+    lidar_topic_hz:   11.1                 # nominal LiDAR frame rate [Hz]
+    imu_topic_hz:     240.0                # nominal IMU sample rate [Hz]
+
+    # ---- (IV) scale-aware adaptive voxelization ----/synced_bf_lidar
+    d0:        0.5
+    d_min:     0.02
+    d_max:     1.0
+    N_min:     1000
+    N_max:     4000
+    tau_m:     30.0
+    p_exp:     2.0
+    N_w:       5
+    lambda_p:  0.1
+    lambda_d:  1.0
+    Kp_min:    1.0e-6
+    Kp_max:    1.0e-4
+    Kd_min:    1.0e-9
+    Kd_max:    1.0e-7
+
+    # ---- (V-B) voxel-pruned correspondence search / map ----
+    d_root:        0.5
+    tau_closest:   1.0
+    plane_min_pts: 6
+    plane_ratio:   0.10
+    max_pts_voxel: 50
+    gate_sigma:    3.0
+
+    # ---- (V) hybrid-metric ESIKF ----
+    eps_po:       1.0e-6
+    lambda_po:    0.1
+    max_iter:     10
+    tau_converge: 1.0e-3 
+
+    # ---- sensor noise (TUNE!!) ----
+    #random defaults:
+    acc_noise: 1.0e-2
+    gyr_noise: 1.0e-3 
+    acc_bias_rw: 1.0e-4
+    gyr_bias_rw: 1.0e-5
+    
+    #acc_noise: 0.01 #0.015 works                         #1.0e-2 <....... 2.0e-2 >
+    #gyr_noise: 0.0004 #0.0008 works   ** (4e-4 to 8e-4)                      #1.0e-3 
+    #acc_bias_rw: 0.0001      #1.0e-4
+    #gyr_bias_rw: 0.000021     #1.0e-5
+    # acc_noise:         0.1    # Base: 0.00177
+    # gyr_noise:         0.01   # Base: 0.000566 rad
+    # acc_bias_rw:       0.001    # Base: 0.00006
+    # gyr_bias_rw:       2.3e-5    # Base: 0.0000033 rad
+
+    lidar_range_std:   0.02
+    lidar_bearing_std: 0.0017
+    imu_init_count:    2000 # 1000......you can edit this if you want..
+
+    # ---- extrinsics  L (LiDAR) -> I (IMU/body) (CHANGE!!)----
+    # extrinsic_rot:   3x3 rotation matrix R_IL (row-major) that rotates a vector
+    #                  expressed in the LiDAR frame INTO the IMU/body frame.
+    # extrinsic_trans: 3x1 translation t_IL [m], the LiDAR origin expressed in the
+    #                  IMU frame.  Together I_T_L = (R_IL, t_IL) maps LiDAR -> IMU.
+    # Replace with your LiDAR -> IMU calibration.
+    # No need to change the Rotation matrix if your imu topic is /mavros/imu/data or /bf_lidar/imu_out or /ap/imu/experimental/data or /camera/camera/imu
+    # Cause the rotation for these imus are handled within the main files
+    extrinsic_rot:   [1.0, 0.0, 0.0,
+                      0.0, 1.0, 0.0,
+                      0.0, 0.0, 1.0]                 
+    extrinsic_trans: [0.0, 0.0, 0.0] #[0.07, 0.2, 0.33] #[0.0, 0.0, 0.08] #[0.0, 0.0, 0.0]

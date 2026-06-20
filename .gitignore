@@ -1,0 +1,16 @@
+# ROS 2 build artifacts
+build/
+install/
+log/
+.vscode/
+
+# C++ Compilation
+*.o
+*.so
+*.a
+*.out
+*.app
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
