@@ -700,7 +700,7 @@ private:
   // world-frame body trajectory `traj` recorded during forward propagation.
   // Output stays in the LiDAR frame (referenced to scan end).
   PointCloud deskew(const PointCloud & raw, const std::vector<PoseStamp> & traj,
-                    double scan_t0);
+                    double scan_t0, double scan_dur); //double scan_t0); //CRITICAL FIX: ADDED scan_dur HERE 
 
   void initializeImu(const ImuData & imu);
   void publish(double stamp);
@@ -743,6 +743,7 @@ private:
   bool   imu_inited_ = false;
   bool   first_scan_ = true;
   double point_time_scale_ = 1.0;
+  double lidar_time_offset_ = 0.0; // NEW ADDITION
   double last_imu_t_ = -1.0;
   double last_scan_end_ = -1.0;
   Vec3   last_gyr_ = Vec3::Zero();         // most recent debiasable body rate

@@ -572,6 +572,7 @@ GenZLioNode::GenZLioNode() : rclcpp::Node("genz_lio_node")
   world_frame_ = declare_parameter<std::string>("world_frame", "odom");
   body_frame_  = declare_parameter<std::string>("body_frame", "base_link");
   point_time_scale_ = declare_parameter<double>("point_time_scale", 1.0);
+  lidar_time_offset_ = declare_parameter<double>("lidar_time_offset", 0.0); //NEW ADDITION
 
   // ---- Output options ----
   deskew_mode_           = declare_parameter<int>("deskew_mode", 1);
@@ -677,15 +678,17 @@ GenZLioNode::GenZLioNode() : rclcpp::Node("genz_lio_node")
 
   path_.header.frame_id = world_frame_;
 
+
   RCLCPP_INFO(get_logger(),
-    "GenZ-LIO up. LiDAR='%s'  IMU='%s'  (paper used MID-70/VLP-16/AVIA + VN-100/BMI088;"
-    " here configured for Vortex).",
+    "Vortex GenZ-LIO up. LiDAR='%s'  IMU='%s' ",
     points_topic.c_str(), imu_topic.c_str());
+  RCLCPP_INFO(get_logger(), 
+    "Deskew Mode Locked: %d (0=Bypass, 1=Exact IMU, 2=GenZ-ICP Fake)", deskew_mode_);
   RCLCPP_INFO(get_logger(),
-    "config: range=[%.2f,%.2f] m  vert_fov=[%.1f,%.1f] deg  scan_lines=%d  "
+    "config: range=[%.2f,%.2f] m  vert_fov=[%.1f,%.1f] deg  scan_lines=%d offset=%.4f s "
     "rates~(lidar %.0f Hz, imu %.0f Hz)  publish_tf=%d scan_pub=%d body_pub=%d pcd_save=%d",
     params_.lidar_min_range, params_.lidar_max_range, params_.lidar_fov_down,
-    params_.lidar_fov_up, params_.lidar_scan_lines, lidar_topic_hz_, imu_topic_hz_,
+    params_.lidar_fov_up, params_.lidar_scan_lines, lidar_time_offset_, lidar_topic_hz_, imu_topic_hz_, //NEW ADDITION: ADDED LIDAR TIME OFFSET
     static_cast<int>(publish_tf_), static_cast<int>(scan_publish_en_),
     static_cast<int>(scan_bodyframe_pub_en_), static_cast<int>(pcd_save_en_));
 }
@@ -793,8 +796,9 @@ void GenZLioNode::cloudCallback(const sensor_msgs::msg::PointCloud2::SharedPtr m
 bool GenZLioNode::parseCloud(const sensor_msgs::msg::PointCloud2 & msg, PointCloud & out,
                              double & scan_t0, double & scan_dur)
 {
-  scan_t0 = stampSec(msg.header.stamp);
-
+  //scan_t0 = stampSec(msg.header.stamp);
+  scan_t0 = stampSec(msg.header.stamp) + lidar_time_offset_; //NEW ADDTION: ADDED LIDAR TIME OFFSET
+  
   // Inspect field metadata only (names + datatypes). All point data below is
   // read through sensor_msgs::PointCloud2ConstIterator -- no raw byte offsets.
   bool has_x = false, has_y = false, has_z = false;
@@ -904,13 +908,11 @@ bool GenZLioNode::parseCloud(const sensor_msgs::msg::PointCloud2 & msg, PointClo
     }
   }
   
-  RCLCPP_INFO_ONCE(get_logger(), "DIAGNOSTIC: scan_dur = %f seconds (tmax: %f, tmin: %f)", scan_dur, tmax, tmin);
-  
   return !out.empty();
 }
 
 PointCloud GenZLioNode::deskew(const PointCloud & raw,
-                               const std::vector<PoseStamp> & traj, double scan_t0)
+                               const std::vector<PoseStamp> & traj, double scan_t0, double scan_dur) //double scan_t0) //CRITICAL FIX: ADDED scan_dur HERE
 {
   // // No per-point time or no trajectory -> nothing to undistort.
    //if (raw.empty() || traj.size() < 2) return raw;
@@ -946,8 +948,17 @@ PointCloud GenZLioNode::deskew(const PointCloud & raw,
   // ==============================================================
   // BIG BLUNT BLOCK 3: MODES 1 & 2 (DESKEW MATH)
   // ==============================================================
-  if (raw.empty() || traj.size() < 2 || raw.back().time == 0.0) return raw;
-
+  //if (raw.empty() || traj.size() < 2 || raw.back().time == 0.0) return raw;
+  //CRITICAL FIX: REPLACING THE ABOVE LINE WITH THIS..now it checks scan_dur instead of raw.back().time
+  if (raw.empty() || traj.size() < 2 || scan_dur < 1e-6) {
+    // If we are supposed to be deskewing, but the breaker tripped, warn us once every 5 seconds
+    if (deskew_mode_ != 0) {
+      RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000, 
+        "DESKEW BYPASSED (Breaker Tripped): IMU packets=%zu, Scan duration=%f", traj.size(), scan_dur);
+    }
+    return raw;
+  }
+  
   const PoseStamp & start = traj.front();
   const PoseStamp & end = traj.back();
   const Mat3 R_end_inv = end.R.transpose();
@@ -996,27 +1007,6 @@ PointCloud GenZLioNode::deskew(const PointCloud & raw,
     PointXYZIT q = pt;
     q.x = p_L_end.x(); q.y = p_L_end.y(); q.z = p_L_end.z();
     out.push_back(q);
-  }
-  
-  // ADD THIS TEMPORARY DIAGNOSTIC BLOCK AT THE END OF deskew():
-  if (!raw.empty() && traj.size() >= 2) {
-    // Check if the very last point actually moved
-    const Vec3 raw_p = raw.back().vec();
-    const Vec3 deskew_p = out.back().vec();
-    const double diff = (raw_p - deskew_p).norm();
-    
-    // Only print if the rover is moving faster than 5cm/s to avoid console spam
-    if (diff > 0.05) { 
-        RCLCPP_INFO(get_logger(), 
-          "DESKEW ACTIVE: Moving by %f meters. (Traj size: %zu)", diff, traj.size());
-    }
-  
-    RCLCPP_INFO(rclcpp::get_logger("deskew_diag"), 
-      "DESKEW MATH: Traj size = %zu. Point moved by = %f meters. (t_abs: %f, traj_start: %f, traj_end: %f)", 
-      traj.size(), diff, (scan_t0 + raw.back().time), traj.front().t, traj.back().t);
-  } else {
-    RCLCPP_WARN(rclcpp::get_logger("deskew_diag"), 
-      "DESKEW ABORTED: Traj size = %zu (needs >= 2)", traj.size());
   }
   
   return out;
@@ -1095,7 +1085,8 @@ bool GenZLioNode::tryProcess()
   last_imu_t_ = t_prev;
 
   // ---- Backward propagation (deskew) -> S_t ----
-  const PointCloud S_t = deskew(raw, traj, scan_t0);
+  const PointCloud S_t = deskew(raw, traj, scan_t0, scan_dur); //scan_t0); //CRITICAL FIX: ADDED scan_dur HERE
+  
 
   // ---- (IV) Scale-aware adaptive voxelization -> V_t, V_merge_t ----
   const double dt_scan = (scan_dur > 1e-3) ? scan_dur : 0.1;
@@ -1120,6 +1111,7 @@ bool GenZLioNode::tryProcess()
                 world_pts.size(), vox.d_t);
     publish(scan_t0 + scan_dur);
     publishScan(scan_t0 + scan_dur, vox.V_merge_t, ekf_->state());
+    
     return true;
   }
 
@@ -1144,6 +1136,11 @@ bool GenZLioNode::tryProcess()
     "scan: N_temp=%d N_des=%d d_t=%.3f m_bar=%.2f |V_t|=%zu iters=%d voxels=%zu",
     vox.N_temp, vox.N_desired, vox.d_t, vox.m_bar, vox.V_t.size(), iters, map_->numVoxels());
 
+// LOGGER ---------------
+    // Print a health summary every 10 seconds (10000 ms)
+  RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 10000,
+    "[GenZ-LIO Health] Voxel Map Size: %zu points | Last EKF Iters: %d", map_->numVoxels(), iters);
+    
   publish(scan_t0 + scan_dur);
   publishScan(scan_t0 + scan_dur, vox.V_merge_t, ekf_->state());
   return true;

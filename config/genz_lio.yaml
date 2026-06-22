@@ -13,6 +13,12 @@ genz_lio_node:
     # 2 = Constant Velocity Fake Deskew (Like the one in Genz-icp)
     deskew_mode: 0
 
+    # ---- temporal extrinsics ----
+    # Time offset between LiDAR and IMU in seconds. 
+    # t_IMU = t_LiDAR + lidar_time_offset
+    # Positive means LiDAR timestamps are older/lagging behind the IMU.
+    lidar_time_offset: 0.0
+
     # ---- topics / frames ----
     points_topic: "/bf_lidar/point_cloud_out"     # sensor_msgs/PointCloud2 
     imu_topic:    "/synced_ap_imu"           # sensor_msgs/Imu          
@@ -68,15 +74,15 @@ genz_lio_node:
 
     # ---- sensor noise (TUNE!!) ----
     #random defaults:
-    acc_noise: 1.0e-2
-    gyr_noise: 1.0e-3 
-    acc_bias_rw: 1.0e-4
-    gyr_bias_rw: 1.0e-5
+    #acc_noise: 1.0e-2
+    #gyr_noise: 1.0e-3 
+    #acc_bias_rw: 1.0e-4
+    #gyr_bias_rw: 1.0e-5
     
-    #acc_noise: 0.01 #0.015 works                         #1.0e-2 <....... 2.0e-2 >
-    #gyr_noise: 0.0004 #0.0008 works   ** (4e-4 to 8e-4)                      #1.0e-3 
-    #acc_bias_rw: 0.0001      #1.0e-4
-    #gyr_bias_rw: 0.000021     #1.0e-5
+    acc_noise: 0.01 #0.015 works                         #1.0e-2 <....... 2.0e-2 >
+    gyr_noise: 0.0004 #0.0008 works   ** (4e-4 to 8e-4)                      #1.0e-3 
+    acc_bias_rw: 0.0001      #1.0e-4
+    gyr_bias_rw: 0.000021     #1.0e-5
     # acc_noise:         0.1    # Base: 0.00177
     # gyr_noise:         0.01   # Base: 0.000566 rad
     # acc_bias_rw:       0.001    # Base: 0.00006
